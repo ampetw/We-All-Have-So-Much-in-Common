@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>We All Have So Much in Common</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Doto:wght@800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main>
+      <section id="home" class="view view-home" data-view="home">
+        <nav class="home-nav" aria-label="Primary">
+          <a class="home-link" href="#/new">New Ticket</a>
+          <a class="home-link" href="#/community">View Community</a>
+        </nav>
+      </section>
+
+      <section id="new" class="view view-new" data-view="new" hidden>
+        <a class="back-link" href="#/">Home</a>
+
+        <form id="ticket-form" class="ticket-form" autocomplete="off">
+          <article
+            class="ticket ticket-editor"
+            id="ticket-preview"
+            style="--ombre-start: #e9ca30; --ombre-end: #e4451a"
+          >
+            <div class="ticket-face" aria-hidden="true"></div>
+            <div class="ticket-stub">
+              <div class="ticket-qr" id="editor-qr" aria-hidden="true">
+                <div data-qr></div>
+              </div>
+              <label class="ticket-place">
+                <span class="sr-only">Place</span>
+                <input
+                  id="place-stub"
+                  name="place"
+                  type="text"
+                  maxlength="12"
+                  placeholder="PLACE"
+                  required
+                  spellcheck="false"
+                  autocapitalize="characters"
+                />
+              </label>
+              <label class="ticket-meta-field">
+                <span>Date</span>
+                <div class="ticket-date-input" id="date-stub">
+                  <input
+                    data-date="mm"
+                    type="text"
+                    inputmode="numeric"
+                    maxlength="2"
+                    size="2"
+                    placeholder="MM"
+                    autocomplete="off"
+                    spellcheck="false"
+                    aria-label="Month"
+                  />
+                  <span aria-hidden="true">/</span>
+                  <input
+                    data-date="dd"
+                    type="text"
+                    inputmode="numeric"
+                    maxlength="2"
+                    size="2"
+                    placeholder="DD"
+                    autocomplete="off"
+                    spellcheck="false"
+                    aria-label="Day"
+                  />
+                  <span aria-hidden="true">/</span>
+                  <input
+                    data-date="year"
+                    type="text"
+                    inputmode="numeric"
+                    maxlength="4"
+                    size="4"
+                    placeholder="YEAR"
+                    autocomplete="off"
+                    spellcheck="false"
+                    aria-label="Year"
+                  />
+                </div>
+              </label>
+              <label class="ticket-meta-field">
+                <span>Passenger</span>
+                <input
+                  id="passenger-stub"
+                  class="ticket-passenger-input"
+                  name="passenger"
+                  type="text"
+                  maxlength="22"
+                  placeholder=""
+                  required
+                  spellcheck="false"
+                  autocapitalize="characters"
+                />
+              </label>
+            </div>
+
+            <div class="ticket-main">
+              <div class="ticket-main-copy">
+                <label class="ticket-place">
+                  <span class="sr-only">Place</span>
+                  <input
+                    id="place-main"
+                    type="text"
+                    maxlength="12"
+                    placeholder="PLACE"
+                    spellcheck="false"
+                    tabindex="-1"
+                    autocapitalize="characters"
+                  />
+                </label>
+                <label class="ticket-meta-field">
+                  <span>Date</span>
+                  <div class="ticket-date-input" id="date-main">
+                    <input
+                      data-date="mm"
+                      type="text"
+                      inputmode="numeric"
+                      maxlength="2"
+                      size="2"
+                      placeholder="MM"
+                      autocomplete="off"
+                      spellcheck="false"
+                      tabindex="-1"
+                      aria-label="Month"
+                    />
+                    <span aria-hidden="true">/</span>
+                    <input
+                      data-date="dd"
+                      type="text"
+                      inputmode="numeric"
+                      maxlength="2"
+                      size="2"
+                      placeholder="DD"
+                      autocomplete="off"
+                      spellcheck="false"
+                      tabindex="-1"
+                      aria-label="Day"
+                    />
+                    <span aria-hidden="true">/</span>
+                    <input
+                      data-date="year"
+                      type="text"
+                      inputmode="numeric"
+                      maxlength="4"
+                      size="4"
+                      placeholder="YEAR"
+                      autocomplete="off"
+                      spellcheck="false"
+                      tabindex="-1"
+                      aria-label="Year"
+                    />
+                  </div>
+                </label>
+                <label class="ticket-meta-field">
+                  <span>Passenger</span>
+                  <input
+                    id="passenger-main"
+                    class="ticket-passenger-input"
+                    type="text"
+                    maxlength="22"
+                    placeholder=""
+                    spellcheck="false"
+                    tabindex="-1"
+                    autocapitalize="characters"
+                  />
+                </label>
+              </div>
+              <div class="ticket-write">
+                <label class="ticket-write-field">
+                  <span class="sr-only">Your memory</span>
+                  <textarea
+                    id="ticket-memory"
+                    name="memory"
+                    rows="8"
+                    maxlength="480"
+                    required
+                    placeholder="Write your memory here"
+                  ></textarea>
+                </label>
+              </div>
+            </div>
+          </article>
+
+          <div class="ticket-tools">
+            <div class="ticket-tools-start">
+            <div class="cmyk-triggers">
+              <fieldset class="cmyk-group" id="cmyk-start">
+                <legend class="sr-only">From</legend>
+                <button
+                  type="button"
+                  class="cmyk-circle"
+                  data-trigger
+                  aria-label="From color"
+                  aria-expanded="false"
+                ></button>
+                <span class="cmyk-circle-label">From</span>
+                <div class="cmyk-popover" data-popover>
+                  <div class="cmyk-graph">
+                    <div class="cmyk-sv-wrap">
+                      <canvas data-sv width="260" height="168"></canvas>
+                      <span class="cmyk-sv-cursor" data-sv-cursor></span>
+                    </div>
+                    <div class="cmyk-hue-wrap">
+                      <canvas data-hue width="18" height="168"></canvas>
+                      <span class="cmyk-hue-cursor" data-hue-cursor></span>
+                    </div>
+                  </div>
+                  <p class="cmyk-readout" data-readout></p>
+                </div>
+              </fieldset>
+
+              <fieldset class="cmyk-group" id="cmyk-end">
+                <legend class="sr-only">To</legend>
+                <button
+                  type="button"
+                  class="cmyk-circle"
+                  data-trigger
+                  aria-label="To color"
+                  aria-expanded="false"
+                ></button>
+                <span class="cmyk-circle-label">To</span>
+                <div class="cmyk-popover" data-popover>
+                  <div class="cmyk-graph">
+                    <div class="cmyk-sv-wrap">
+                      <canvas data-sv width="260" height="168"></canvas>
+                      <span class="cmyk-sv-cursor" data-sv-cursor></span>
+                    </div>
+                    <div class="cmyk-hue-wrap">
+                      <canvas data-hue width="18" height="168"></canvas>
+                      <span class="cmyk-hue-cursor" data-hue-cursor></span>
+                    </div>
+                  </div>
+                  <p class="cmyk-readout" data-readout></p>
+                </div>
+              </fieldset>
+
+              <fieldset class="cmyk-group" id="cmyk-type">
+                <legend class="sr-only">Type</legend>
+                <button
+                  type="button"
+                  class="cmyk-circle"
+                  data-trigger
+                  aria-label="Type color"
+                  aria-expanded="false"
+                  style="--swatch: #000000"
+                ></button>
+                <span class="cmyk-circle-label">Type</span>
+                <div class="cmyk-popover" data-popover>
+                  <div class="cmyk-graph">
+                    <div class="cmyk-sv-wrap">
+                      <canvas data-sv width="260" height="168"></canvas>
+                      <span class="cmyk-sv-cursor" data-sv-cursor></span>
+                    </div>
+                    <div class="cmyk-hue-wrap">
+                      <canvas data-hue width="18" height="168"></canvas>
+                      <span class="cmyk-hue-cursor" data-hue-cursor></span>
+                    </div>
+                  </div>
+                  <p class="cmyk-readout" data-readout></p>
+                </div>
+              </fieldset>
+            </div>
+            <a class="media-link" id="add-media" href="#/m/">Add Media</a>
+            </div>
+
+            <button class="submit-link" type="submit">Add Ticket</button>
+          </div>
+        </form>
+      </section>
+
+      <section id="community" class="view view-community" data-view="community" hidden>
+        <header class="community-header">
+          <a class="back-link" href="#/">Home</a>
+          <h1>View Community</h1>
+        </header>
+        <div id="ticket-grid" class="ticket-grid"></div>
+      </section>
+
+      <section id="memory" class="view view-memory" data-view="memory" hidden>
+        <a class="back-link" data-memory-back href="#/new">Back</a>
+        <header class="memory-header">
+          <h1 data-memory-title>Memory</h1>
+          <p class="memory-meta" data-memory-meta></p>
+        </header>
+
+        <div class="memory-grid">
+          <article class="memory-card">
+            <h2>Voice recording</h2>
+            <div class="memory-actions" data-edit-only>
+              <button type="button" class="memory-btn" data-voice-record>Record voice</button>
+              <button type="button" class="memory-btn" data-voice-stop hidden>Stop</button>
+            </div>
+            <audio data-voice-player controls hidden></audio>
+            <p class="memory-empty" data-voice-empty>No voice recording yet.</p>
+          </article>
+
+          <article class="memory-card">
+            <h2>Video recording</h2>
+            <div class="memory-actions" data-edit-only>
+              <button type="button" class="memory-btn" data-video-record>Record video</button>
+              <button type="button" class="memory-btn" data-video-stop hidden>Stop</button>
+            </div>
+            <video data-video-preview playsinline muted hidden></video>
+            <video data-video-player controls playsinline hidden></video>
+            <p class="memory-empty" data-video-empty>No video recording yet.</p>
+          </article>
+
+          <article class="memory-card">
+            <h2>Attachment</h2>
+            <label class="memory-file" data-edit-only>
+              <span>Add a file</span>
+              <input data-file-input type="file" />
+            </label>
+            <p class="memory-file-name" data-file-name hidden></p>
+            <a class="memory-file-link" data-file-link hidden download>Download attachment</a>
+            <img class="memory-file-preview" data-file-preview alt="" hidden />
+            <p class="memory-empty" data-file-empty>No attachment yet.</p>
+          </article>
+
+          <article class="memory-card memory-card-text">
+            <h2>More text</h2>
+            <textarea
+              data-extra-text
+              rows="8"
+              maxlength="2000"
+              placeholder="Add more to this memory"
+            ></textarea>
+            <p class="memory-extra-view" data-extra-view hidden></p>
+          </article>
+        </div>
+
+        <button type="button" class="submit-link memory-save" data-memory-save>
+          Save
+        </button>
+      </section>
+    </main>
+
+    <script src="qrcode.min.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>
