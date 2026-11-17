@@ -6,8 +6,6 @@ const DEFAULT_OMBRE = {
 };
 
 const DEFAULT_TYPE_COLOR = "#000000";
-const EXTRAS_KEY = "wahsmic-extras-v1";
-const MEDIA_DB = "wahsmic-media-v1";
 
 const seedTickets = [
   {
@@ -60,12 +58,19 @@ const views = {
   home: document.getElementById("home"),
   new: document.getElementById("new"),
   community: document.getElementById("community"),
+  ticket: document.getElementById("ticket-view"),
   memory: document.getElementById("memory"),
 };
 
 const form = document.getElementById("ticket-form");
 const preview = document.getElementById("ticket-preview");
 const grid = document.getElementById("ticket-grid");
+const ticketFull = document.getElementById("ticket-full");
+const communityPrev = document.querySelector("[data-community-prev]");
+const communityNext = document.querySelector("[data-community-next]");
+const COMMUNITY_PAGE_SIZE = 2;
+let communityPage = 0;
+let communityAnimating = false;
 const startGroup = document.getElementById("cmyk-start");
 const endGroup = document.getElementById("cmyk-end");
 const typeGroup = document.getElementById("cmyk-type");
@@ -90,8 +95,21 @@ function makeCode() {
   return [...bytes].map((byte) => alphabet[byte % alphabet.length]).join("");
 }
 
-function ticketLink(code, editable = false) {
-  return `${location.origin}${location.pathname}#/m/${code}${editable ? "/edit" : ""}`;
+let shareOrigin = location.origin.replace(/\/$/, "");
+
+function ticketLink(code) {
+  return `${shareOrigin}/m/${encodeURIComponent(code)}`;
+}
+
+async function loadShareOrigin() {
+  try {
+    const response = await fetch("/api/origin");
+    if (!response.ok) return;
+    const data = await response.json();
+    if (data.origin) shareOrigin = String(data.origin).replace(/\/$/, "");
+  } catch {
+    /* static server fallback */
+  }
 }
 
 function loadTickets() {
@@ -445,98 +463,36 @@ function bindAddMedia() {
 }
 
 function refreshEditorQr() {
-  addMediaLink.href = `#/m/${editorCode}/edit`;
-  paintQr(editorQr.querySelector("[data-qr]"), ticketLink(editorCode), typePicker.getHex());
-}
-
-function loadExtrasMap() {
-  try {
-    return JSON.parse(localStorage.getItem(EXTRAS_KEY) || "{}");
-  } catch {
-    return {};
-  }
-}
-
-function getExtras(code) {
-  return (
-    loadExtrasMap()[code] || {
-      code,
-      extraText: "",
-      locked: false,
-      hasVoice: false,
-      hasVideo: false,
-      hasFile: false,
-      fileName: "",
-      fileType: "",
-    }
-  );
-}
-
-function saveExtras(record) {
-  const all = loadExtrasMap();
-  all[record.code] = record;
-  localStorage.setItem(EXTRAS_KEY, JSON.stringify(all));
-}
-
-function openMediaDb() {
-  return new Promise((resolve, reject) => {
-    const request = indexedDB.open(MEDIA_DB, 1);
-    request.onupgradeneeded = () => {
-      request.result.createObjectStore("files");
-    };
-    request.onsuccess = () => resolve(request.result);
-    request.onerror = () => reject(request.error);
-  });
-}
-
-async function putMedia(key, blob) {
-  const db = await openMediaDb();
-  await new Promise((resolve, reject) => {
-    const tx = db.transaction("files", "readwrite");
-    tx.objectStore("files").put(blob, key);
-    tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(tx.error);
-  });
-}
-
-async function getMedia(key) {
-  const db = await openMediaDb();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction("files", "readonly");
-    const request = tx.objectStore("files").get(key);
-    request.onsuccess = () => resolve(request.result || null);
-    request.onerror = () => reject(request.error);
-  });
+  addMediaLink.href = `/#/m/${editorCode}/edit`;
+  const url = ticketLink(editorCode);
+  editorQr.dataset.url = url;
+  paintQr(editorQr.querySelector("[data-qr]"), url, typePicker.getHex());
 }
 
 const memoryEls = {
   back: document.querySelector("[data-memory-back]"),
   title: document.querySelector("[data-memory-title]"),
   meta: document.querySelector("[data-memory-meta]"),
-  extraText: document.querySelector("[data-extra-text]"),
-  extraView: document.querySelector("[data-extra-view]"),
-  save: document.querySelector("[data-memory-save]"),
-  voiceRecord: document.querySelector("[data-voice-record]"),
-  voiceStop: document.querySelector("[data-voice-stop]"),
-  voicePlayer: document.querySelector("[data-voice-player]"),
-  voiceEmpty: document.querySelector("[data-voice-empty]"),
-  videoRecord: document.querySelector("[data-video-record]"),
-  videoStop: document.querySelector("[data-video-stop]"),
-  videoPreview: document.querySelector("[data-video-preview]"),
-  videoPlayer: document.querySelector("[data-video-player]"),
-  videoEmpty: document.querySelector("[data-video-empty]"),
+  addText: document.querySelector("[data-add-text]"),
+  addVoice: document.querySelector("[data-add-voice]"),
+  addFile: document.querySelector("[data-add-file]"),
   fileInput: document.querySelector("[data-file-input]"),
-  fileName: document.querySelector("[data-file-name]"),
-  fileLink: document.querySelector("[data-file-link]"),
-  filePreview: document.querySelector("[data-file-preview]"),
-  fileEmpty: document.querySelector("[data-file-empty]"),
+  status: document.querySelector("[data-memory-status]"),
+  list: document.querySelector("[data-memory-list]"),
+  empty: document.querySelector("[data-memory-empty]"),
+  save: document.querySelector("[data-memory-save]"),
 };
 
 let currentMemoryCode = "";
 let memoryEditable = false;
+let memoryItems = [];
 let activeStream = null;
 let activeRecorder = null;
 let objectUrls = [];
+
+function itemId(prefix) {
+  return `${prefix}-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
+}
 
 function forgetObjectUrls() {
   objectUrls.forEach((url) => URL.revokeObjectURL(url));
@@ -547,6 +503,16 @@ function useObjectUrl(blob) {
   const url = URL.createObjectURL(blob);
   objectUrls.push(url);
   return url;
+}
+
+function setMemoryStatus(message) {
+  memoryEls.status.hidden = !message;
+  memoryEls.status.textContent = message || "";
+}
+
+function setVoiceButton(recording) {
+  memoryEls.addVoice.textContent = recording ? "stop recording" : "add voice memo";
+  memoryEls.addVoice.classList.toggle("is-recording", recording);
 }
 
 function stopActiveMedia() {
@@ -562,14 +528,7 @@ function stopActiveMedia() {
     activeStream.getTracks().forEach((track) => track.stop());
     activeStream = null;
   }
-  if (memoryEls.videoPreview) {
-    memoryEls.videoPreview.srcObject = null;
-    memoryEls.videoPreview.hidden = true;
-  }
-  memoryEls.voiceStop.hidden = true;
-  memoryEls.videoStop.hidden = true;
-  memoryEls.voiceRecord.hidden = false;
-  memoryEls.videoRecord.hidden = false;
+  setVoiceButton(false);
 }
 
 function findTicketByCode(code) {
@@ -583,166 +542,287 @@ function findTicketByCode(code) {
   }
 }
 
-function setMediaVisible(player, empty, blob) {
-  if (blob) {
-    player.src = useObjectUrl(blob);
-    player.hidden = false;
-    empty.hidden = true;
-  } else {
-    player.removeAttribute("src");
-    player.hidden = true;
-    empty.hidden = false;
+function mediaSrc(code, filename) {
+  return `/media/${encodeURIComponent(code)}/${encodeURIComponent(filename)}`;
+}
+
+function emptyMedia(code) {
+  return {
+    code,
+    place: "",
+    passenger: "",
+    date: "",
+    memory: "",
+    ombreStart: DEFAULT_OMBRE.start,
+    ombreEnd: DEFAULT_OMBRE.end,
+    typeColor: DEFAULT_TYPE_COLOR,
+    texts: [],
+    voices: [],
+    files: [],
+  };
+}
+
+async function fetchSavedMedia(code) {
+  try {
+    const response = await fetch(`/api/media/${encodeURIComponent(code)}`);
+    if (response.status === 404) return emptyMedia(code);
+    if (!response.ok) return emptyMedia(code);
+    return await response.json();
+  } catch {
+    return emptyMedia(code);
   }
 }
 
-async function renderMemoryMedia(record) {
-  forgetObjectUrls();
-  const voice = record.hasVoice ? await getMedia(`${record.code}-voice`) : null;
-  const video = record.hasVideo ? await getMedia(`${record.code}-video`) : null;
-  const file = record.hasFile ? await getMedia(`${record.code}-file`) : null;
-  setMediaVisible(memoryEls.voicePlayer, memoryEls.voiceEmpty, voice);
-  setMediaVisible(memoryEls.videoPlayer, memoryEls.videoEmpty, video);
+function itemsFromSaved(saved) {
+  const items = [];
+  (saved.texts || []).forEach((text) => {
+    items.push({ kind: "text", id: text.id || itemId("t"), body: text.body || "" });
+  });
+  (saved.voices || []).forEach((voice) => {
+    items.push({
+      kind: "voice",
+      id: voice.id || itemId("v"),
+      src: voice.filename ? mediaSrc(saved.code, voice.filename) : "",
+      type: voice.type || "audio/webm",
+      blob: null,
+    });
+  });
+  (saved.files || []).forEach((file) => {
+    items.push({
+      kind: "file",
+      id: file.id || itemId("f"),
+      name: file.name || "Attachment",
+      type: file.type || "",
+      src: file.filename ? mediaSrc(saved.code, file.filename) : "",
+      blob: null,
+    });
+  });
+  return items;
+}
 
-  if (file) {
-    const url = useObjectUrl(file);
-    memoryEls.fileEmpty.hidden = true;
-    memoryEls.fileName.hidden = false;
-    memoryEls.fileName.textContent = record.fileName || "Attachment";
-    memoryEls.fileLink.hidden = false;
-    memoryEls.fileLink.href = url;
-    memoryEls.fileLink.download = record.fileName || "attachment";
-    if ((record.fileType || file.type || "").startsWith("image/")) {
-      memoryEls.filePreview.hidden = false;
-      memoryEls.filePreview.src = url;
-    } else {
-      memoryEls.filePreview.hidden = true;
-      memoryEls.filePreview.removeAttribute("src");
+function applyMemoryChrome(ticket) {
+  memoryView.style.setProperty("--ombre-start", ticket?.ombreStart || DEFAULT_OMBRE.start);
+  memoryView.style.setProperty("--ombre-end", ticket?.ombreEnd || DEFAULT_OMBRE.end);
+  memoryView.style.setProperty("--type-color", ticket?.typeColor || DEFAULT_TYPE_COLOR);
+  memoryEls.title.textContent = ticket?.place || "New memory";
+  memoryEls.meta.textContent = [ticket?.passenger, ticket?.date].filter(Boolean).join(" · ");
+}
+
+function renderMemoryList() {
+  memoryEls.list.innerHTML = "";
+  memoryItems.forEach((item) => {
+    const row = document.createElement("article");
+    row.className = "memory-item";
+    row.dataset.id = item.id;
+    if (item.kind === "text") {
+      if (memoryEditable) {
+        const field = document.createElement("textarea");
+        field.rows = 6;
+        field.maxLength = 2000;
+        field.placeholder = "Write more here";
+        field.value = item.body || "";
+        field.addEventListener("input", () => {
+          item.body = field.value;
+        });
+        row.appendChild(field);
+      } else {
+        const text = document.createElement("p");
+        text.className = "memory-item-text";
+        text.textContent = item.body || "";
+        row.appendChild(text);
+      }
+    } else if (item.kind === "voice") {
+      const audio = document.createElement("audio");
+      audio.controls = true;
+      audio.src = item.src || (item.blob ? useObjectUrl(item.blob) : "");
+      row.appendChild(audio);
+    } else if (item.kind === "file") {
+      const href = item.src || (item.blob ? useObjectUrl(item.blob) : "#");
+      if ((item.type || "").startsWith("image/")) {
+        const image = document.createElement("img");
+        image.className = "memory-file-preview";
+        image.alt = memoryEditable ? "Attachment" : "";
+        image.src = href;
+        row.appendChild(image);
+      }
+      if (!memoryEditable) {
+        const link = document.createElement("a");
+        link.className = "memory-file-link";
+        link.href = href;
+        link.download = item.name || "attachment";
+        link.textContent = item.name || "Attachment";
+        row.appendChild(link);
+      }
     }
-  } else {
-    memoryEls.fileEmpty.hidden = false;
-    memoryEls.fileName.hidden = true;
-    memoryEls.fileLink.hidden = true;
-    memoryEls.fileLink.removeAttribute("href");
-    memoryEls.filePreview.hidden = true;
-  }
+    if (memoryEditable) {
+      const remove = document.createElement("button");
+      remove.type = "button";
+      remove.className = "memory-remove";
+      remove.textContent = "remove";
+      remove.addEventListener("click", () => {
+        memoryItems = memoryItems.filter((entry) => entry.id !== item.id);
+        renderMemoryList();
+      });
+      row.appendChild(remove);
+    }
+    memoryEls.list.appendChild(row);
+  });
+  memoryEls.empty.hidden = memoryItems.length > 0 || memoryEditable;
 }
 
 async function openMemoryPage(code, editable) {
   stopActiveMedia();
+  forgetObjectUrls();
   currentMemoryCode = code;
   memoryEditable = Boolean(editable);
-  const ticket = findTicketByCode(code);
-  const record = getExtras(code);
-  const saved = loadTickets().some((item) => item.code === code);
-  memoryView.style.setProperty("--ombre-start", ticket?.ombreStart || DEFAULT_OMBRE.start);
-  memoryView.style.setProperty("--ombre-end", ticket?.ombreEnd || DEFAULT_OMBRE.end);
-  memoryView.style.setProperty("--type-color", ticket?.typeColor || DEFAULT_TYPE_COLOR);
+  const saved = await fetchSavedMedia(code);
+  const ticket = findTicketByCode(code) || saved;
+  const published = loadTickets().some((item) => item.code === code);
+  applyMemoryChrome(ticket);
   memoryView.classList.toggle("is-editable", memoryEditable);
-  memoryEls.back.href = saved ? "#/community" : "#/new";
-  memoryEls.title.textContent = ticket?.place || "New memory";
-  memoryEls.meta.textContent = [ticket?.passenger, ticket?.date].filter(Boolean).join(" · ");
-  memoryEls.extraText.value = record.extraText || "";
-  memoryEls.extraView.textContent = record.extraText || "No extra text yet.";
-  memoryEls.extraView.hidden = memoryEditable;
+  memoryEls.back.href = published ? "/#/community" : "/#/new";
   memoryEls.save.textContent = "Save";
-  await renderMemoryMedia(record);
+  setMemoryStatus("");
+  memoryItems = itemsFromSaved(saved);
+  renderMemoryList();
 }
 
-async function startRecording(kind) {
+async function startVoiceMemo() {
   if (!memoryEditable) return;
-  stopActiveMedia();
-  const constraints = kind === "video" ? { audio: true, video: true } : { audio: true };
-  const stream = await navigator.mediaDevices.getUserMedia(constraints);
-  activeStream = stream;
-  if (kind === "video") {
-    memoryEls.videoPreview.srcObject = stream;
-    memoryEls.videoPreview.hidden = false;
-    memoryEls.videoPlayer.hidden = true;
-    memoryEls.videoRecord.hidden = true;
-    memoryEls.videoStop.hidden = false;
-  } else {
-    memoryEls.voiceRecord.hidden = true;
-    memoryEls.voiceStop.hidden = false;
+  if (activeRecorder && activeRecorder.state === "recording") {
+    stopActiveMedia();
+    return;
   }
-  const types =
-    kind === "video"
-      ? ["video/webm;codecs=vp9,opus", "video/webm;codecs=vp8,opus", "video/webm"]
-      : ["audio/webm;codecs=opus", "audio/webm", "audio/mp4"];
+  stopActiveMedia();
+  const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  activeStream = stream;
+  const types = ["audio/webm;codecs=opus", "audio/webm", "audio/mp4"];
   const mimeType = types.find((type) => MediaRecorder.isTypeSupported(type)) || "";
   const chunks = [];
   activeRecorder = new MediaRecorder(stream, mimeType ? { mimeType } : undefined);
+  setVoiceButton(true);
   activeRecorder.addEventListener("dataavailable", (event) => {
     if (event.data.size) chunks.push(event.data);
   });
-  activeRecorder.addEventListener("stop", async () => {
+  activeRecorder.addEventListener("stop", () => {
     stream.getTracks().forEach((track) => track.stop());
     if (activeStream === stream) activeStream = null;
-    const blob = new Blob(chunks, { type: activeRecorder?.mimeType || mimeType || chunks[0]?.type });
-    const record = getExtras(currentMemoryCode);
-    if (kind === "video") {
-      await putMedia(`${currentMemoryCode}-video`, blob);
-      record.hasVideo = true;
-      memoryEls.videoPreview.srcObject = null;
-      memoryEls.videoPreview.hidden = true;
-    } else {
-      await putMedia(`${currentMemoryCode}-voice`, blob);
-      record.hasVoice = true;
-    }
-    saveExtras(record);
-    await renderMemoryMedia(record);
-    memoryEls.voiceRecord.hidden = false;
-    memoryEls.videoRecord.hidden = false;
-    memoryEls.voiceStop.hidden = true;
-    memoryEls.videoStop.hidden = true;
+    setVoiceButton(false);
+    const blob = new Blob(chunks, { type: activeRecorder?.mimeType || mimeType || chunks[0]?.type || "audio/webm" });
     activeRecorder = null;
+    if (!blob.size) return;
+    memoryItems.push({
+      kind: "voice",
+      id: itemId("v"),
+      blob,
+      type: blob.type,
+      src: "",
+    });
+    renderMemoryList();
   });
   activeRecorder.start();
 }
 
-function bindMemoryPage() {
-  memoryEls.voiceRecord.addEventListener("click", () => {
-    startRecording("voice").catch(() => {
-      memoryEls.voiceEmpty.textContent = "Microphone permission is needed to record.";
-      memoryEls.voiceEmpty.hidden = false;
+function collectTextBodies() {
+  memoryEls.list.querySelectorAll(".memory-item textarea").forEach((field) => {
+    const item = memoryItems.find((entry) => entry.id === field.closest(".memory-item")?.dataset.id);
+    if (item && item.kind === "text") item.body = field.value;
+  });
+}
+
+async function saveMemoryPage() {
+  if (!currentMemoryCode || !memoryEditable) return;
+  stopActiveMedia();
+  collectTextBodies();
+  const ticket = findTicketByCode(currentMemoryCode) || snapshotEditor();
+  const payload = {
+    code: currentMemoryCode,
+    place: ticket.place || "",
+    passenger: ticket.passenger || "",
+    date: ticket.date || "",
+    memory: ticket.memory || "",
+    ombreStart: ticket.ombreStart || DEFAULT_OMBRE.start,
+    ombreEnd: ticket.ombreEnd || DEFAULT_OMBRE.end,
+    typeColor: ticket.typeColor || DEFAULT_TYPE_COLOR,
+    texts: memoryItems
+      .filter((item) => item.kind === "text" && item.body.trim())
+      .map((item) => ({ id: item.id, body: item.body.trim() })),
+  };
+  const data = new FormData();
+  data.append("meta", JSON.stringify(payload));
+  for (const item of memoryItems) {
+    if (item.kind === "voice") {
+      if (item.blob) {
+        data.append(`voice-${item.id}`, item.blob, `${item.id}.webm`);
+      } else if (item.src) {
+        const blob = await fetch(item.src).then((res) => res.blob());
+        data.append(`voice-${item.id}`, blob, `${item.id}.webm`);
+      }
+    }
+    if (item.kind === "file") {
+      if (item.blob) {
+        data.append(`file-${item.id}`, item.blob, item.name || "attachment");
+      } else if (item.src) {
+        const blob = await fetch(item.src).then((res) => res.blob());
+        data.append(`file-${item.id}`, blob, item.name || "attachment");
+      }
+    }
+  }
+  setMemoryStatus("Saving…");
+  try {
+    const response = await fetch(`/api/media/${encodeURIComponent(currentMemoryCode)}`, {
+      method: "POST",
+      body: data,
     });
-  });
-  memoryEls.videoRecord.addEventListener("click", () => {
-    startRecording("video").catch(() => {
-      memoryEls.videoEmpty.textContent = "Camera permission is needed to record.";
-      memoryEls.videoEmpty.hidden = false;
-    });
-  });
-  memoryEls.voiceStop.addEventListener("click", () => stopActiveMedia());
-  memoryEls.videoStop.addEventListener("click", () => stopActiveMedia());
-  memoryEls.fileInput.addEventListener("change", async () => {
-    if (!memoryEditable) return;
-    const file = memoryEls.fileInput.files?.[0];
-    if (!file) return;
-    await putMedia(`${currentMemoryCode}-file`, file);
-    const record = getExtras(currentMemoryCode);
-    record.hasFile = true;
-    record.fileName = file.name;
-    record.fileType = file.type;
-    saveExtras(record);
-    memoryEls.fileInput.value = "";
-    await renderMemoryMedia(record);
-  });
-  memoryEls.extraText.addEventListener("input", () => {
-    if (!currentMemoryCode || !memoryEditable) return;
-    const record = getExtras(currentMemoryCode);
-    record.extraText = memoryEls.extraText.value;
-    saveExtras(record);
-  });
-  memoryEls.save.addEventListener("click", () => {
-    if (!currentMemoryCode || !memoryEditable) return;
-    stopActiveMedia();
-    const record = getExtras(currentMemoryCode);
-    record.extraText = memoryEls.extraText.value.trim();
-    saveExtras(record);
+    if (!response.ok) throw new Error("save failed");
+    const saved = await response.json();
+    memoryItems = itemsFromSaved(saved);
+    renderMemoryList();
     memoryEls.save.textContent = "Saved";
+    setMemoryStatus("");
     window.setTimeout(() => {
       if (memoryEls.save.textContent === "Saved") memoryEls.save.textContent = "Save";
     }, 1400);
+  } catch {
+    setMemoryStatus("Could not save. Keep the local server running, then try again.");
+  }
+}
+
+function bindMemoryPage() {
+  memoryEls.addText.addEventListener("click", () => {
+    if (!memoryEditable) return;
+    const id = itemId("t");
+    memoryItems.push({ kind: "text", id, body: "" });
+    renderMemoryList();
+    memoryEls.list.querySelector(`[data-id="${id}"] textarea`)?.focus();
+  });
+  memoryEls.addVoice.addEventListener("click", () => {
+    startVoiceMemo().catch(() => {
+      setMemoryStatus("Microphone permission is needed to record.");
+      setVoiceButton(false);
+    });
+  });
+  memoryEls.addFile.addEventListener("click", () => {
+    if (!memoryEditable) return;
+    memoryEls.fileInput.click();
+  });
+  memoryEls.fileInput.addEventListener("change", () => {
+    if (!memoryEditable) return;
+    [...(memoryEls.fileInput.files || [])].forEach((file) => {
+      memoryItems.push({
+        kind: "file",
+        id: itemId("f"),
+        blob: file,
+        name: file.name,
+        type: file.type,
+        src: "",
+      });
+    });
+    memoryEls.fileInput.value = "";
+    renderMemoryList();
+  });
+  memoryEls.save.addEventListener("click", () => {
+    saveMemoryPage();
   });
 }
 
@@ -927,27 +1007,104 @@ function ticketMarkup(ticket) {
   `;
 }
 
-function renderCommunity() {
-  const tickets = [...loadTickets()].sort((a, b) => b.id - a.id);
-  grid.innerHTML = tickets
-    .map(
-      (ticket) => `
-        <article class="ticket-card">
-          <div
-            class="ticket"
-            data-code="${escapeHtml(ticket.code)}"
-            style="--ombre-start: ${escapeHtml(ticket.ombreStart)}; --ombre-end: ${escapeHtml(ticket.ombreEnd)}; --type-color: ${escapeHtml(ticket.typeColor)}"
-          >${ticketMarkup(ticket)}</div>
-        </article>
-      `
-    )
-    .join("");
-  grid.querySelectorAll(".ticket-card .ticket").forEach((card) => {
+function communityTickets() {
+  return [...loadTickets()].sort((a, b) => b.id - a.id);
+}
+
+function communityPageCount() {
+  return Math.max(1, Math.ceil(communityTickets().length / COMMUNITY_PAGE_SIZE));
+}
+
+function paintTicketQrs(root) {
+  root.querySelectorAll(".ticket[data-code]").forEach((card) => {
     const holder = card.querySelector("[data-qr]");
     const code = card.dataset.code;
     if (!holder || !code) return;
     paintQr(holder, ticketLink(code), card.style.getPropertyValue("--type-color").trim() || DEFAULT_TYPE_COLOR);
   });
+}
+
+function ticketCardMarkup(ticket) {
+  return `
+    <a class="ticket-card" href="#/ticket/${encodeURIComponent(ticket.code)}">
+      <div
+        class="ticket"
+        data-code="${escapeHtml(ticket.code)}"
+        style="--ombre-start: ${escapeHtml(ticket.ombreStart)}; --ombre-end: ${escapeHtml(ticket.ombreEnd)}; --type-color: ${escapeHtml(ticket.typeColor)}"
+      >${ticketMarkup(ticket)}</div>
+    </a>
+  `;
+}
+
+function renderCommunityPage() {
+  const tickets = communityTickets();
+  const pages = communityPageCount();
+  communityPage = Math.min(Math.max(0, communityPage), pages - 1);
+  const start = communityPage * COMMUNITY_PAGE_SIZE;
+  const visible = tickets.slice(start, start + COMMUNITY_PAGE_SIZE);
+  if (!visible.length) {
+    grid.innerHTML = `<p class="community-empty">No tickets yet.</p>`;
+  } else {
+    grid.innerHTML = visible.map(ticketCardMarkup).join("");
+    paintTicketQrs(grid);
+  }
+  const showArrows = tickets.length > COMMUNITY_PAGE_SIZE;
+  communityPrev.hidden = !showArrows;
+  communityNext.hidden = !showArrows;
+}
+
+function renderCommunity() {
+  grid.classList.remove("is-out-next", "is-out-prev", "is-in-next", "is-in-prev");
+  renderCommunityPage();
+}
+
+function slideCommunity(delta) {
+  const tickets = communityTickets();
+  if (tickets.length <= COMMUNITY_PAGE_SIZE || communityAnimating) return;
+  const pages = communityPageCount();
+  const nextPage = (communityPage + delta + pages) % pages;
+  if (nextPage === communityPage) return;
+  communityAnimating = true;
+  const outClass = delta > 0 ? "is-out-next" : "is-out-prev";
+  const inClass = delta > 0 ? "is-in-next" : "is-in-prev";
+  grid.classList.add(outClass);
+  window.setTimeout(() => {
+    communityPage = nextPage;
+    renderCommunityPage();
+    grid.classList.remove(outClass);
+    grid.classList.add(inClass);
+    void grid.offsetWidth;
+    grid.classList.remove(inClass);
+    window.setTimeout(() => {
+      communityAnimating = false;
+    }, 280);
+  }, 220);
+}
+
+function bindCommunity() {
+  communityPrev.addEventListener("click", () => slideCommunity(-1));
+  communityNext.addEventListener("click", () => slideCommunity(1));
+  window.addEventListener("keydown", (event) => {
+    if (document.body.dataset.view !== "community") return;
+    if (event.key === "ArrowLeft") slideCommunity(-1);
+    if (event.key === "ArrowRight") slideCommunity(1);
+  });
+}
+
+function renderTicketView(code) {
+  const ticket = loadTickets().find((item) => item.code === code);
+  if (!ticket) {
+    location.hash = "#/community";
+    return;
+  }
+  ticketFull.innerHTML = `
+    <div
+      class="ticket"
+      data-code="${escapeHtml(ticket.code)}"
+      style="--ombre-start: ${escapeHtml(ticket.ombreStart)}; --ombre-end: ${escapeHtml(ticket.ombreEnd)}; --type-color: ${escapeHtml(ticket.typeColor)}"
+    >${ticketMarkup(ticket)}</div>
+  `;
+  paintTicketQrs(ticketFull);
 }
 
 function resetEditor() {
@@ -962,17 +1119,39 @@ function resetEditor() {
   syncTicket();
 }
 
-function route() {
-  stopActiveMedia();
+function parseRoute() {
+  const path = (location.pathname.replace(/\/+$/, "") || "/");
+  const pathMatch = path.match(/^\/m\/([^/]+)(?:\/(edit))?$/i);
+  if (pathMatch) {
+    return {
+      view: "memory",
+      code: decodeURIComponent(pathMatch[1]),
+      editable: pathMatch[2] === "edit",
+    };
+  }
   const hash = (location.hash || "#/").replace(/^#/, "") || "/";
   const memoryMatch = hash.match(/^\/m\/([^/?#]+)(?:\/(edit))?\/?$/);
-  const viewName = memoryMatch
-    ? "memory"
-    : hash === "/" || hash === ""
-      ? "home"
-      : views[hash.replace(/^\//, "")]
-        ? hash.replace(/^\//, "")
-        : "home";
+  if (memoryMatch) {
+    return {
+      view: "memory",
+      code: decodeURIComponent(memoryMatch[1]),
+      editable: memoryMatch[2] === "edit",
+    };
+  }
+  const ticketMatch = hash.match(/^\/ticket\/([^/?#]+)\/?$/);
+  if (ticketMatch) {
+    return { view: "ticket", code: decodeURIComponent(ticketMatch[1]) };
+  }
+  if (hash === "/" || hash === "") return { view: "home" };
+  const name = hash.replace(/^\//, "");
+  if (views[name]) return { view: name };
+  return { view: "home" };
+}
+
+function route() {
+  stopActiveMedia();
+  const parsed = parseRoute();
+  const viewName = parsed.view;
 
   Object.entries(views).forEach(([name, el]) => {
     const isActive = name === viewName;
@@ -986,12 +1165,15 @@ function route() {
     viewName === "new"
       ? "New Ticket — We All Have So Much in Common"
       : viewName === "community"
-        ? "View Community — We All Have So Much in Common"
-        : viewName === "memory"
-          ? "Ticket Memory — We All Have So Much in Common"
-          : "We All Have So Much in Common";
+        ? "Community — We All Have So Much in Common"
+        : viewName === "ticket"
+          ? "Ticket — We All Have So Much in Common"
+          : viewName === "memory"
+            ? "Ticket Memory — We All Have So Much in Common"
+            : "We All Have So Much in Common";
 
   if (viewName === "community") renderCommunity();
+  if (viewName === "ticket") renderTicketView(parsed.code);
   if (viewName === "new") {
     requestAnimationFrame(() => {
       startPicker.redraw();
@@ -1001,7 +1183,7 @@ function route() {
     });
   }
   if (viewName === "memory") {
-    openMemoryPage(decodeURIComponent(memoryMatch[1]), memoryMatch[2] === "edit");
+    openMemoryPage(parsed.code, parsed.editable);
   }
   window.scrollTo(0, 0);
 }
@@ -1015,6 +1197,7 @@ typePicker.setHex(DEFAULT_TYPE_COLOR);
 syncTicket();
 refreshEditorQr();
 bindAddMedia();
+bindCommunity();
 bindMemoryPage();
 syncPair(placeStub, placeMain, (value) => value.toUpperCase());
 syncPair(passengerStub, passengerMain, (value) => value.toUpperCase());
@@ -1054,8 +1237,13 @@ form.addEventListener("submit", (event) => {
   });
   saveTickets(tickets);
   resetEditor();
+  communityPage = 0;
   location.hash = "#/community";
 });
 
 window.addEventListener("hashchange", route);
+loadShareOrigin().then(() => {
+  refreshEditorQr();
+  if (document.body.dataset.view === "community") renderCommunity();
+});
 route();

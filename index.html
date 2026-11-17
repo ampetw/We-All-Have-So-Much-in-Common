@@ -10,19 +10,22 @@
       href="https://fonts.googleapis.com/css2?family=Doto:wght@800&display=swap"
       rel="stylesheet"
     />
-    <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
     <main>
       <section id="home" class="view view-home" data-view="home">
         <nav class="home-nav" aria-label="Primary">
-          <a class="home-link" href="#/new">New Ticket</a>
-          <a class="home-link" href="#/community">View Community</a>
+          <a class="home-link" href="/#/new">New Ticket</a>
+          <a class="home-link" href="/#/community">View Community</a>
         </nav>
       </section>
 
       <section id="new" class="view view-new" data-view="new" hidden>
-        <a class="back-link" href="#/">Home</a>
+        <div class="page-top">
+          <a class="back-link" href="/#/">Home</a>
+          <button class="submit-link" type="submit" form="ticket-form">Add Ticket</button>
+        </div>
 
         <form id="ticket-form" class="ticket-form" autocomplete="off">
           <article
@@ -272,80 +275,59 @@
             </div>
             <a class="media-link" id="add-media" href="#/m/">Add Media</a>
             </div>
-
-            <button class="submit-link" type="submit">Add Ticket</button>
           </div>
         </form>
       </section>
 
       <section id="community" class="view view-community" data-view="community" hidden>
-        <header class="community-header">
-          <a class="back-link" href="#/">Home</a>
-          <h1>View Community</h1>
-        </header>
-        <div id="ticket-grid" class="ticket-grid"></div>
+        <a class="back-link community-home" href="/#/">Home</a>
+        <h1 class="community-title">Community</h1>
+        <div class="community-stage">
+          <button type="button" class="community-arrow" data-community-prev aria-label="Previous tickets">
+            ‹
+          </button>
+          <div class="community-frame">
+            <div id="ticket-grid" class="ticket-grid"></div>
+          </div>
+          <button type="button" class="community-arrow" data-community-next aria-label="Next tickets">
+            ›
+          </button>
+        </div>
+      </section>
+
+      <section id="ticket-view" class="view view-ticket" data-view="ticket" hidden>
+        <a class="back-link" href="#/community">Back</a>
+        <div id="ticket-full" class="ticket-full"></div>
       </section>
 
       <section id="memory" class="view view-memory" data-view="memory" hidden>
-        <a class="back-link" data-memory-back href="#/new">Back</a>
+        <div class="memory-top" data-edit-only>
+          <a class="back-link" data-memory-back href="/#/new">Back</a>
+          <button type="button" class="memory-save" data-memory-save>Save</button>
+        </div>
         <header class="memory-header">
           <h1 data-memory-title>Memory</h1>
           <p class="memory-meta" data-memory-meta></p>
         </header>
 
-        <div class="memory-grid">
-          <article class="memory-card">
-            <h2>Voice recording</h2>
-            <div class="memory-actions" data-edit-only>
-              <button type="button" class="memory-btn" data-voice-record>Record voice</button>
-              <button type="button" class="memory-btn" data-voice-stop hidden>Stop</button>
-            </div>
-            <audio data-voice-player controls hidden></audio>
-            <p class="memory-empty" data-voice-empty>No voice recording yet.</p>
-          </article>
+        <p class="memory-note" data-edit-only>
+          these extra media attachments on this page can be viewed when scanning the qr code on your ticket!
+        </p>
 
-          <article class="memory-card">
-            <h2>Video recording</h2>
-            <div class="memory-actions" data-edit-only>
-              <button type="button" class="memory-btn" data-video-record>Record video</button>
-              <button type="button" class="memory-btn" data-video-stop hidden>Stop</button>
-            </div>
-            <video data-video-preview playsinline muted hidden></video>
-            <video data-video-player controls playsinline hidden></video>
-            <p class="memory-empty" data-video-empty>No video recording yet.</p>
-          </article>
+        <nav class="memory-add" data-edit-only>
+          <button type="button" data-add-text>add text</button>
+          <button type="button" data-add-voice>add voice memo</button>
+          <button type="button" data-add-file>add attachment</button>
+          <input data-file-input type="file" hidden multiple />
+        </nav>
 
-          <article class="memory-card">
-            <h2>Attachment</h2>
-            <label class="memory-file" data-edit-only>
-              <span>Add a file</span>
-              <input data-file-input type="file" />
-            </label>
-            <p class="memory-file-name" data-file-name hidden></p>
-            <a class="memory-file-link" data-file-link hidden download>Download attachment</a>
-            <img class="memory-file-preview" data-file-preview alt="" hidden />
-            <p class="memory-empty" data-file-empty>No attachment yet.</p>
-          </article>
-
-          <article class="memory-card memory-card-text">
-            <h2>More text</h2>
-            <textarea
-              data-extra-text
-              rows="8"
-              maxlength="2000"
-              placeholder="Add more to this memory"
-            ></textarea>
-            <p class="memory-extra-view" data-extra-view hidden></p>
-          </article>
-        </div>
-
-        <button type="button" class="submit-link memory-save" data-memory-save>
-          Save
-        </button>
+        <p class="memory-status" data-memory-status hidden></p>
+        <div class="memory-list" data-memory-list></div>
+        <p class="memory-empty" data-memory-empty hidden>Nothing saved on this ticket yet.</p>
       </section>
     </main>
 
-    <script src="qrcode.min.js"></script>
-    <script src="app.js"></script>
+    <script src="/qrcode.min.js"></script>
+    <script src="/app.js"></script>
   </body>
 </html>
