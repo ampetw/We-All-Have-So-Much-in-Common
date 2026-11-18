@@ -1148,30 +1148,64 @@ function parseRoute() {
   return { view: "home" };
 }
 
-function route() {
-  stopActiveMedia();
-  const parsed = parseRoute();
-  const viewName = parsed.view;
+let activeViewName = null;
+let activeRouteKey = "";
+let routeGeneration = 0;
+let settleRouteMotion = null;
 
+function routeKey(parsed) {
+  return `${parsed.view}:${parsed.code || ""}:${parsed.editable ? "edit" : ""}`;
+}
+
+function viewTitle(viewName) {
+  if (viewName === "new") return "New Ticket — We All Have So Much in Common";
+  if (viewName === "community") return "Community — We All Have So Much in Common";
+  if (viewName === "ticket") return "Ticket — We All Have So Much in Common";
+  if (viewName === "memory") return "Ticket Memory — We All Have So Much in Common";
+  return "We All Have So Much in Common";
+}
+
+function applyViewVisibility(viewName) {
   Object.entries(views).forEach(([name, el]) => {
     const isActive = name === viewName;
     el.hidden = !isActive;
-    el.setAttribute("aria-hidden", isActive ? "false" : "true");
     el.inert = !isActive;
+    el.setAttribute("aria-hidden", isActive ? "false" : "true");
+    el.classList.remove("is-leaving", "is-entering");
+    el.style.removeProperty("--leave-scroll");
   });
+  document.body.classList.remove("is-routing");
+  document.querySelectorAll(".is-route-ghost").forEach((node) => node.remove());
+}
 
+function settleMotion() {
+  const settle = settleRouteMotion;
+  settleRouteMotion = null;
+  if (settle) settle();
+}
+
+function cloneView(view) {
+  const ghost = view.cloneNode(true);
+  const liveCanvas = view.querySelectorAll("canvas");
+  const ghostCanvas = ghost.querySelectorAll("canvas");
+  liveCanvas.forEach((canvas, index) => {
+    const copy = ghostCanvas[index];
+    if (!copy) return;
+    copy.width = canvas.width;
+    copy.height = canvas.height;
+    const context = copy.getContext("2d");
+    if (context) context.drawImage(canvas, 0, 0);
+  });
+  ghost.removeAttribute("id");
+  ghost.querySelectorAll("[id]").forEach((el) => el.removeAttribute("id"));
+  ghost.classList.add("is-route-ghost");
+  ghost.inert = true;
+  return ghost;
+}
+
+function prepareView(viewName, parsed) {
   document.body.dataset.view = viewName;
-  document.title =
-    viewName === "new"
-      ? "New Ticket — We All Have So Much in Common"
-      : viewName === "community"
-        ? "Community — We All Have So Much in Common"
-        : viewName === "ticket"
-          ? "Ticket — We All Have So Much in Common"
-          : viewName === "memory"
-            ? "Ticket Memory — We All Have So Much in Common"
-            : "We All Have So Much in Common";
-
+  document.title = viewTitle(viewName);
   if (viewName === "community") renderCommunity();
   if (viewName === "ticket") renderTicketView(parsed.code);
   if (viewName === "new") {
@@ -1182,10 +1216,85 @@ function route() {
       refreshEditorQr();
     });
   }
-  if (viewName === "memory") {
-    openMemoryPage(parsed.code, parsed.editable);
-  }
+  if (viewName === "memory") openMemoryPage(parsed.code, parsed.editable);
+}
+
+function slideViews(leaving, entering, viewName) {
+  const scrollY = window.scrollY || document.documentElement.scrollTop || 0;
+  leaving.style.setProperty("--leave-scroll", `${scrollY}px`);
+  document.body.classList.add("is-routing");
+  leaving.hidden = false;
+  leaving.inert = true;
+  entering.hidden = false;
+  entering.inert = true;
+  entering.setAttribute("aria-hidden", "false");
+  leaving.classList.add("is-leaving");
+  entering.classList.add("is-entering");
   window.scrollTo(0, 0);
+  entering.scrollTop = 0;
+
+  const generation = ++routeGeneration;
+  let pending = 2;
+  let settled = false;
+  const settle = () => {
+    if (settled || generation !== routeGeneration) return;
+    settled = true;
+    leaving.removeEventListener("animationend", onEnd);
+    entering.removeEventListener("animationend", onEnd);
+    window.clearTimeout(timer);
+    if (leaving.classList.contains("is-route-ghost")) leaving.remove();
+    applyViewVisibility(viewName);
+    if (settleRouteMotion === settle) settleRouteMotion = null;
+  };
+  const finishOne = () => {
+    pending -= 1;
+    if (pending > 0) return;
+    settle();
+  };
+  const onEnd = (event) => {
+    if (event.target !== leaving && event.target !== entering) return;
+    if (event.animationName !== "view-slide-out" && event.animationName !== "view-slide-in") return;
+    finishOne();
+  };
+  settleRouteMotion = settle;
+  leaving.addEventListener("animationend", onEnd);
+  entering.addEventListener("animationend", onEnd);
+  const timer = window.setTimeout(settle, 700);
+}
+
+function route() {
+  stopActiveMedia();
+  settleMotion();
+  const parsed = parseRoute();
+  const viewName = parsed.view;
+  const nextKey = routeKey(parsed);
+  const next = views[viewName];
+  const previous = activeViewName ? views[activeViewName] : null;
+  const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const samePlace = nextKey === activeRouteKey;
+
+  if (!previous || !next || previous === next && samePlace || samePlace || reduceMotion) {
+    prepareView(viewName, parsed);
+    applyViewVisibility(viewName);
+    activeViewName = viewName;
+    activeRouteKey = nextKey;
+    window.scrollTo(0, 0);
+    return;
+  }
+
+  const leaving = previous === next ? cloneView(previous) : previous;
+  if (leaving !== previous) document.body.appendChild(leaving);
+  Object.entries(views).forEach(([name, el]) => {
+    if (el === previous || el === next) return;
+    el.hidden = true;
+    el.inert = true;
+    el.setAttribute("aria-hidden", "true");
+    el.classList.remove("is-leaving", "is-entering");
+  });
+  prepareView(viewName, parsed);
+  activeViewName = viewName;
+  activeRouteKey = nextKey;
+  slideViews(leaving, next, viewName);
 }
 
 let editorCode = makeCode();

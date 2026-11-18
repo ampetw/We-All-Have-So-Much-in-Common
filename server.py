@@ -25,11 +25,43 @@ def lan_ip() -> str:
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
         sock.connect(("8.8.8.8", 80))
-        return sock.getsockname()[0]
+        ip = sock.getsockname()[0]
+        if ip and not ip.startswith("127."):
+            return ip
     except OSError:
-        return "127.0.0.1"
+        pass
     finally:
         sock.close()
+
+    try:
+        import subprocess
+
+        route = subprocess.run(
+            ["route", "-n", "get", "default"],
+            capture_output=True,
+            text=True,
+            timeout=2,
+            check=False,
+        )
+        iface = ""
+        for line in route.stdout.splitlines():
+            if "interface:" in line:
+                iface = line.split(":", 1)[1].strip()
+                break
+        if iface:
+            addr = subprocess.run(
+                ["ipconfig", "getifaddr", iface],
+                capture_output=True,
+                text=True,
+                timeout=2,
+                check=False,
+            )
+            ip = addr.stdout.strip()
+            if ip and not ip.startswith("127."):
+                return ip
+    except OSError:
+        pass
+    return "127.0.0.1"
 
 
 def share_origin() -> str:
