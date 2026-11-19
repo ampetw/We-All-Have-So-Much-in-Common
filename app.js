@@ -95,10 +95,16 @@ function makeCode() {
   return [...bytes].map((byte) => alphabet[byte % alphabet.length]).join("");
 }
 
-let shareOrigin = location.origin.replace(/\/$/, "");
+function siteRoot() {
+  const base = document.querySelector("base");
+  if (!base) return location.origin.replace(/\/$/, "");
+  return new URL(base.getAttribute("href") || "/", location.origin).href.replace(/\/$/, "");
+}
+
+let shareOrigin = siteRoot();
 
 function ticketLink(code) {
-  return `${shareOrigin}/m/${encodeURIComponent(code)}`;
+  return `${shareOrigin}/#/m/${encodeURIComponent(code)}`;
 }
 
 async function loadShareOrigin() {
@@ -463,7 +469,7 @@ function bindAddMedia() {
 }
 
 function refreshEditorQr() {
-  addMediaLink.href = `/#/m/${editorCode}/edit`;
+  addMediaLink.href = `#/m/${editorCode}/edit`;
   const url = ticketLink(editorCode);
   editorQr.dataset.url = url;
   paintQr(editorQr.querySelector("[data-qr]"), url, typePicker.getHex());
@@ -680,7 +686,7 @@ async function openMemoryPage(code, editable) {
   const published = loadTickets().some((item) => item.code === code);
   applyMemoryChrome(ticket);
   memoryView.classList.toggle("is-editable", memoryEditable);
-  memoryEls.back.href = published ? "/#/community" : "/#/new";
+  memoryEls.back.href = published ? "#/community" : "#/new";
   memoryEls.save.textContent = "Save";
   setMemoryStatus("");
   memoryItems = itemsFromSaved(saved);
